@@ -97,22 +97,34 @@ def parse_holodule():
         youtube_title = get_youtube_title(youtube_link)
 
         should_add_new_db_entry = True
+        should_edit_existing_telegram_message = False
         for row, record in enumerate(g_records):
             if record["Youtube Link"] == youtube_link:
                 should_add_new_db_entry = False
                 old_live_date = record["Live Date"]
                 old_live_time = record["Live Time"]
                 old_yt_title = record["Youtube Title"]
+                data_changed = False
 
                 if old_live_date != live_date:
                     g_sheet.update_cell(row + 2, 1, live_date)
+                    live_date = f"<s>{old_live_date}</s> -> {live_date}"
+                    data_changed = True
 
                 if old_live_time != live_time:
                     g_sheet.update_cell(row + 2, 2, f"'{live_time}")
+                    live_time = f"<s>{old_live_time}</s> -> {live_time}"
+                    data_changed = True
 
                 if old_yt_title != youtube_title:
                     youtube_title = get_youtube_title(youtube_link)
                     g_sheet.update_cell(row + 2, 5, youtube_title)
+                    data_changed = True
+
+                if data_changed:
+                    member_name = f"[UPDATE]\n\n{member_name}"
+
+                should_edit_existing_telegram_message = data_changed
 
                 break
 
@@ -125,6 +137,7 @@ def parse_holodule():
             "Member Name": member_name,
             "Youtube Link": youtube_link,
             "Youtube Title": youtube_title,
+            "Should Edit Existing Telegram Message": should_edit_existing_telegram_message
         })
 
         if should_add_new_db_entry:
@@ -135,29 +148,38 @@ def parse_holodule():
     return ret
 
 
-def send_info(message: str):
+g_telegram_api_call_counter = 0
+
+
+def send_info(message: str, mode: str = 'w', message_id: int = -1):
+    global g_telegram_api_call_counter
     TOKEN = "1243277966:AAHBh9eRkNEcK4CuODijw5XWmzY8CMuKK-Q"
 
-    payload = {
-        "parse_mode": "html",
-        "chat_id": "@holodule",
-        "text": message,
-    }
+    if mode.lower() == 'w':  # write new message
+        payload = {
+            "parse_mode": "html",
+            "chat_id": "@holodule",
+            "text": message,
+        }
+        api_method = "sendMessage"
 
-    return requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data=payload)
+    elif mode.lower() == 'e':  # edit existing message
+        if message_id == -1:
+            raise Exception("Message ID is needed for editing message!")
 
+        payload = {
+            "parse_mode": "html",
+            "chat_id": "@holodule",
+            "text": message,
+            "message_id": message_id
+        }
+        api_method = "editMessageText"
 
-def edit_info(message: str, message_id: int):
-    TOKEN = "1243277966:AAHBh9eRkNEcK4CuODijw5XWmzY8CMuKK-Q"
+    else:
+        raise Exception("Invalid send info mode!")
 
-    payload = {
-        "parse_mode": "html",
-        "chat_id": "@holodule",
-        "text": message,
-        "message_id": message_id
-    }
-
-    return requests.post(f"https://api.telegram.org/bot{TOKEN}/editMessageText", data=payload)
+    g_telegram_api_call_counter += 1
+    return requests.post(f"https://api.telegram.org/bot{TOKEN}/{api_method}", data=payload)
 
 
 def main():
@@ -166,9 +188,8 @@ def main():
     holodules = parse_holodule()
     g_records = g_sheet.get_all_records()
 
-    non_duplicate_counter = 0
     for i, holodule in enumerate(holodules):
-        if (i + 1) % 20 == 0:
+        if (g_telegram_api_call_counter + 1) % 20 == 0:
             sleep(60.1)
 
         message_format = f"{holodule['Member Name']} @ {holodule['Live Date']} | {holodule['Live Time']} " \
@@ -181,10 +202,10 @@ def main():
                 if telegram_message_id == '':
                     telegram_message_id = send_info(message_format).json()["result"]["message_id"]
                     g_sheet.update_cell(row + 2, 6, telegram_message_id)
-                    non_duplicate_counter += 1
                     break
                 else:
-                    edit_info(message_format, telegram_message_id)
+                    if holodule["Should Edit Existing Telegram Message"]:
+                        send_info(message_format, 'e', telegram_message_id)
                     break
 
         sleep(1.1)
