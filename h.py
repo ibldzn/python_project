@@ -117,7 +117,6 @@ def parse_holodule():
                     data_changed = True
 
                 if old_yt_title != youtube_title:
-                    youtube_title = get_youtube_title(youtube_link)
                     g_sheet.update_cell(row + 2, 5, youtube_title)
                     data_changed = True
 
@@ -178,8 +177,12 @@ def send_info(message: str, mode: str = 'w', message_id: int = -1):
     else:
         raise Exception("Invalid send info mode!")
 
+    resp = requests.post(f"https://api.telegram.org/bot{TOKEN}/{api_method}", data=payload)
+
     g_telegram_api_call_counter += 1
-    return requests.post(f"https://api.telegram.org/bot{TOKEN}/{api_method}", data=payload)
+    sleep(1.1)
+
+    return resp
 
 
 def main():
@@ -207,8 +210,6 @@ def main():
                     if holodule["Should Edit Existing Telegram Message"]:
                         send_info(message_format, 'e', telegram_message_id)
                     break
-
-        sleep(1.1)
 
 
 if __name__ == '__main__':
