@@ -59,7 +59,8 @@ def req_get(url: str, **kwargs):
 
 def get_raw_data():
     cookies = {"timezone": "Asia/Jakarta"}
-    return req_get("https://schedule.hololive.tv/", cookies=cookies)
+    ret = req_get("https://schedule.hololive.tv/", cookies=cookies)
+    return ret if ret.ok else None
 
 
 def get_youtube_title(youtube_url: str):
@@ -72,7 +73,11 @@ def add_to_database(row: list):
 
 
 def parse_holodule():
-    bs = BeautifulSoup(get_raw_data().text, "html.parser")
+    raw_data = get_raw_data()
+    if raw_data is None:
+        return None
+
+    bs = BeautifulSoup(raw_data.text, "html.parser")
     schedules = bs.find_all("div", class_="col-6 col-sm-4 col-md-3")
     ret = list()
 
@@ -95,7 +100,7 @@ def parse_holodule():
         member_name = schedule.find("div", class_="col text-right name").text.strip()
         youtube_link = schedule.find("a", class_="thumbnail")["href"]
         youtube_title = get_youtube_title(youtube_link)
-        
+
         if youtube_title is None:
             continue
 
@@ -184,6 +189,9 @@ def main():
     global g_records
 
     holodules = parse_holodule()
+    if holodules is None:
+        return
+
     g_records = g_sheet.get_all_records()
 
     sent_message_counter = 0
