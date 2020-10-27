@@ -63,8 +63,8 @@ def get_raw_data():
 
 
 def get_youtube_title(youtube_url: str):
-    yt = req_get(f"https://www.youtube.com/oembed?url={youtube_url}&format=json").json()
-    return yt["title"]
+    yt = req_get(f"https://www.youtube.com/oembed?url={youtube_url}&format=json")
+    return yt.json()["title"] if yt.ok else None
 
 
 def add_to_database(row: list):
@@ -95,6 +95,9 @@ def parse_holodule():
         member_name = schedule.find("div", class_="col text-right name").text.strip()
         youtube_link = schedule.find("a", class_="thumbnail")["href"]
         youtube_title = get_youtube_title(youtube_link)
+        
+        if youtube_title is None:
+            continue
 
         should_add_new_db_entry = True
         should_edit_existing_telegram_message = False
@@ -141,8 +144,8 @@ def parse_holodule():
 
         if should_add_new_db_entry:
             last = ret[-1]
-            add_to_database([last['Live Date'], last['Live Time'], last['Member Name'],
-                             last['Youtube Link'], last['Youtube Title']])
+            add_to_database([last["Live Date"], last["Live Time"], last["Member Name"],
+                             last["Youtube Link"], last["Youtube Title"]])
 
     return ret
 
@@ -184,7 +187,7 @@ def main():
     g_records = g_sheet.get_all_records()
 
     sent_message_counter = 0
-    for i, holodule in enumerate(holodules):
+    for holodule in holodules:
         message_format = f"{holodule['Member Name']} @ {holodule['Live Date']} | {holodule['Live Time']} " \
                          f"(GMT+07:00)\n\n<a href=\"{holodule['Youtube Link']}\">{holodule['Youtube Title']}</a>"
 
@@ -195,7 +198,7 @@ def main():
                 if telegram_message_id == '':
                     if (sent_message_counter + 1) % 20 == 0:
                         sleep(60.1)
-                        
+
                     telegram_message_id = send_info(message_format).json()["result"]["message_id"]
                     sent_message_counter += 1
                     g_sheet.update_cell(row + 2, 6, telegram_message_id)
